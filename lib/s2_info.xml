@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<struts2>
+<!-- struts2 漏洞的信息 -->
+  <s2 id="001">
+    <name>struts s2-001</name>
+    <version>2.0.0 - 2.0.8</version>
+    <info>该漏洞因为用户提交表单数据并且验证失败时，后端会将用户之前提交的参数值使用 OGNL 表达式 %{value} 进行解析，然后重新填充到对应的表单数据中。</info>
+    <appear>注册或登录页面等需要提交表单且有回显处。</appear>
+  </s2>
+  <s2 id="003">
+    <name>struts s2-003</name>
+    <version>2.0.0-2.0.11.2</version>
+    <info>struts2会将http的每个参数名解析为ongl语句执行(可理解为java代码)。ongl表达式通过#来访问struts的对象，struts框架通过过滤#字符防止安全问题，然而通过unicode编码(\u0023)或8进制(\43)即绕过了安全限制。</info>
+    <appear>直接在action后面添加payload就可以了</appear>
+  </s2>
+  <s2 id="005">
+    <name>struts s2-005</name>
+    <version>2.0.0-2.2.1</version>
+    <info>s2-005漏洞的起源源于S2-003，对于S2-003漏洞，官方通过增加安全配置(禁止静态方法调用和类方法执行等)来修补，但是安全配置被绕过再次导致了漏洞，攻击者可以利用OGNL表达式将这2个选项打开，S2-003的修补方案把自己上了一个锁，但是把锁钥匙给插在了锁头上。</info>
+    <appear>直接在action后面添加payload即可</appear>
+  </s2>
+  <s2 id="007">
+    <name>struts s2-007</name>
+    <version>2.0.0-2.2.3.1</version>
+    <info>S2-007和S2-003、S2-005的漏洞源头都是一样的，都是struts2对OGNL的解析过程中存在漏洞，导致黑客可以通过OGNL表达式实现代码注入和执行，所不同的是:
+	1. S2-003、S2-005: 通过OGNL的name-value的赋值解析过程、#访问全局静态变量(AOP思想)实现代码执行
+	2. S2-007: 通过OGNL中String向long转换过程实现代码执行
+lo.java中定义了一个整数long id，id来自于用户输入，传递一个非整数给id导致错误，struts会将用户的输入当作ongl表达式执行，从而导致了漏洞。
+这个payload有点特别， new byte[] 的字节不能大于返回内容的字节，  太小又会导致返回不全，所以这个测试只能手动做执行命令payload</info>
+    <appear>因此要想利用此漏洞，程序中必须有可以接受外界输入的参数等变为long的参数。</appear>
+  </s2>
+  <s2 id="009">
+    <name>struts s2-009</name>
+    <version>2.1.0-2.3.1.1</version>
+    <info>如果当前action中接受了某个参数example，这个参数将进入OGNL的上下文。所以，我们可以将OGNL表达式放在example参数中，然后使用/helloword.acton?example=&lt;OGNL statement&gt;&amp;(example)(&apos;xxx&apos;)=1的方法来执行它，从而绕过官方对#、\等特殊字符的防御。注意，这个payload有点特殊，后面的"example" 必须是有漏洞那个参数的名称，在上面的payload中，有漏洞的参数名就是"example"</info>
+    <appear>action后面需要带有一个参数。</appear>
+  </s2>
+ <s2 id="012">
+    <name>struts s2-012</name>
+    <version>2.1.0-2.3.13</version>
+    <info>struts2中可以通过${express}或%{express}来引用ongl表达式，当配置一个action中有${input}或%{input}且input来自于外部输入时，给input赋值%{exp}，从而导致任意代码执行。如果在配置 Action 中 Result 时使用了重定向类型，并且还使用 ${param_name} 作为重定向变量，例如：
+	&lt;package name="S2-012" extends="struts-default"&gt;
+        &lt;action name="user" class="com.demo.action.UserAction"&gt;
+        &lt;result name="redirect" type="redirect"&gt;/index.jsp?name=${name}&lt;/result&gt;
+	&lt;result name="input"&gt;/index.jsp&lt;/result&gt;
+        &lt;result name="success"&gt;/index.jsp&lt;/result&gt;
+        &lt;/action&gt;
+        &lt;/package&gt;
+这里 UserAction 中定义有一个 name 变量，当触发 redirect类型返回时，Struts2 获取使用 ${name} 获取其值，在这个过程中会对 name 参数的值执行 OGNL 表达式解析，从而可以插入任意 OGNL 表达式导致命令执行。</info>
+    <appear>有参数处，最好有参数值是使用${}包住</appear>
+  </s2>
+  <s2 id="013">
+    <name>struts s2-013/014</name>
+    <version>2.0.0-2.3.14.1</version>
+    <info>Struts2 标签中 &lt;s:a&gt; 和 &lt;s:url&gt; 都包含一个 includeParams 属性，其值可设置为 none，get 或 all，参考官方其对应意义如下：
+	none - 链接不包含请求的任意参数值（默认）
+	get - 链接只包含 GET 请求中的参数和其值
+	all - 链接包含 GET 和 POST 所有参数和其值
+&lt;s:a&gt;用来显示一个超链接，当includeParams=all的时候，会将本次请求 的GET和POST参数都放在URL的GET参数上。在放置参数的过程中会将参数进行OGNL渲染，造成任意命令执行漏洞</info>
+    <appear>指定超链接参数处，且GET，POST所有参数都被放在URL上。例如指定一个a 标签的参数。</appear>
+  </s2>
+  <s2 id="015">
+    <name>struts s2-015</name>
+    <version>2.0.0-2.3.14.2</version>
+    <info>漏洞产生于配置了 Action 通配符 *，并将其作为动态值时，解析时会将其内容执行 OGNL 表达式，例如：
+		&lt;package name="S2-015" extends="struts-default"&gt;
+		&lt;action name="*" class="com.demo.action.PageAction"&gt;
+		&lt;result&gt;/{1}.jsp&lt;/result&gt;
+		&lt;/action&gt;
+		&lt;/package&gt;
+上述配置能让我们访问 name.action 时使用 name.jsp 来渲染页面，但是在提取 name 并解析时，对其执行了 OGNL 表达式解析，所以导致命令执行。在实践复现的时候发现，由于 name 值的位置比较特殊，一些特殊的字符如 / " \ 都无法使用（转义也不行），所以在利用该点进行远程命令执行时一些带有路径的命令可能无法执行成功。
+
+	还有需要说明的就是在 Struts 2.3.14.1 - Struts 2.3.14.2 的更新内容中，删除了 SecurityMemberAccess 类中的setAllowStaticMethodAccess 方法，因此在 2.3.14.2 版本以后都不能直接通过 #_memberAccess['allowStaticMethodAccess']=true 来修改其值达到重获静态方法调用的能力。为了到达执行命令的目的可以用 kxlzx 提到的调用动态方法(new java.lang.ProcessBuilder('calc')).start() 来解决，另外还可以借助 Java 反射机制去间接修改. </info>
+    <appear>黑盒情况下很难找到点，只能一个一个对.action, .do点来试。</appear>
+  </s2>
+  <s2 id="016">
+    <name>struts s2-016</name>
+    <version>2.0.0-2.3.15</version>
+    <info>在struts2中，DefaultActionMapper类支持以"action:"、"redirect:"、"redirectAction:"作为导航或是重定向前缀，但是这些前缀后面同时可以跟OGNL表达式，由于struts2没有对这些前缀做过滤，导致利用OGNL表达式调用java静态方法执行任意系统命令。所以，访问http://your-ip:8080/index.action?redirect:OGNL表达式即可执行OGNL表达式。</info>
+    <appear>直接在.action, .do后面添加redirect:OGNL表达式。</appear>
+  </s2>
+  <s2 id="019">
+    <name>struts s2-019</name>
+    <version>2.0.0-2.3.15.1</version>
+    <info>动态方法调用是一种已知会施加可能的安全漏洞的机制，但到目前为止，它默认启用，警告用户应尽可能将其关闭。从2.3.15.1版本后默认都会关闭了。</info>
+    <appear>直接在action 后面添加 debug=command&amp;expression=payload 即可.</appear>
+  </s2>
+  <s2 id="029">
+   <name>struts s2-029</name>
+   <version>2.0.0-2.3.24.1</version>
+   <info>Struts2的标签库使用OGNL表达式来访问ActionContext中的对象数据。为了能够访问到ActionContext中的变量，Struts2将ActionContext设置为OGNL的上下文，并将OGNL的跟对象加入ActionContext中。
+在Struts2中，如下的标签就调用了OGNL进行取值。
+&lt;p&gt;parameters: &lt;s:property value="#parameters.msg" /&gt;&lt;/p>&lt;/info&gt;
+如果使用Struts2的web应用将用户提交的数据未经过滤，直接通过Struts2的标签设置成属性值，就被Struts2进行执行。</info>
+   <appear>黑盒情况下只能测试有参数点了</appear>
+  </s2>
+  <s2 id="032">
+    <name>strtus s2-032</name>
+    <version>2.0.0-2.3.28 (except 2.3.20, 2.3.24.2)</version>
+    <info>前提：开启动态方法调用。&lt;constant name="struts.enable.DynamicMethodInvocation" value="true" /&gt;
+假如动态方法调用已经开启,然后我们要调用对应的login方法的话 我们可以通过 http://localhost:8080/struts2/index!login.action来执行动态的方法调用。这种动态方法调用的时候method中的特殊字符都会被替换成空，但是可以通过http://localhost:8080/struts2/index.action?method:login来绕过无法传入特殊字符的限制。通过ognl表达式静态调用获取ognl.OgnlContext的DEFAULT_MEMBER_ACCESS属性，并将获取的结果覆盖_memberAccess属性，这样就可以绕过SecurityMemberAccess的限制。</info>
+    <appear>直接在action 后面添加即可method:payload</appear>
+  </s2>
+  <s2 id="033">
+    <name>strtus-033</name>
+    <version>2.3.20-2.3.28 (except 2.3.20.3 and 2.3.24.3)</version>
+    <info>该漏洞依附于S2-032漏洞，当开启动态方法调用，并且同时使用了Strut2 REST Plugin插件时,使用“!”操作符调用动态方法可能执行ognl表达式，导致代码执行。</info>
+    <appear>http://127.0.0.1:8080/orders/4/payload直接在某个类似的目录后添加payload</appear>
+  </s2>
+  <s2 id="045">
+    <name>struts-045</name>
+    <version>2.3.5-2.3.31 2.5-2.5.10</version>
+    <info>file upload based on Jakarta Multipart parser。这个漏洞是由于Strus2的Jakarta 多媒体解析器对错误消息处理出现了问题，通过Content-Type这个header头，注入OGNL语言，进而执行命令。攻击者可以将恶意代码通过http报文头部的Content-Type字段传递给存在漏洞的服务器，导致任意代码执行漏洞，要想顺利触发，lib中一定要有commons-fileupload-x.x.x.jar包。</info>
+    <appear>发起请求的时候并不需要找到具体的上传点，只要是有效的 URL 就可以发起请求不需要 POST 方法也可以触发。</appear>
+  </s2>
+  <s2 id="048">
+    <name>struts-048</name>
+    <version>2.0.0-2.3.32</version>
+    <info>受影响的Struts版本：Apache Struts 2.3.x系列中启用了struts2-struts1-plugin插件的版本,这个漏洞主要问题出在struts2-struts1-plugin这个非默认的插件包上，由于struts2-struts1-plugin 包中的 “Struts1Action.java”中的 execute 函数可以调用 getText() 函数，这个函数刚好又能执行OGNL表达式，同时这个 getText() 的 参数输入点，又可以被用户直接进行控制，如果这个点被恶意攻击者所控制，就可以构造恶意执行代码，从而实现一个RCE攻击。该漏洞触发需要非默认插件 struts2-struts1-plugin需要手动寻找程序中将客户端参数值添加入 action message 的点</info>
+    <appear>需要找到一个参数输入点，使用${10*10}， 看看是否返回100。 黑盒情况下，只能对一些可能的参数进行测试。</appear>
+  </s2>
+  <s2 id="052">
+    <name>struts-052</name>
+    <version>2.1.2-2.3.33 2.5-2.5.12</version>
+    <info>Struts2-Rest-Plugin是让Struts2能够实现Restful API的一个插件，其根据Content-Type或URI扩展名来判断用户传入的数据包类型，其中对于xml，是使用xstream来解析，而xstream在默认情况下是可以引入任意对象的（针对1.5.x以前的版本），方法就是直接通过xml的tag name指定需要实例化的类名。所以修改Content-Type头为application/xml，在加上payload就可以了</info>
+    <appear>不一定是要提交xml的点，  只有有效点就可以了</appear>
+  </s2>
+  <s2 id="053">
+    <name>Struts s2-053</name>
+    <version>2.0.1-2.3.33  2.5-2.5.10</version>
+    <info>这个漏洞出现的条件比较苛刻，需要使用struts2和freemarker，而且需要编码人员有疏漏。当开发者在Freemarker标签中使用如下代码时&lt;@s.hidden name=”redirectUri” value=redirectUri /&gt;&lt;@s.hidden name=”redirectUri” value=”${redirectUri}” /&gt;Freemarker会将值当做表达式进行执行，最后导致代码执行。</info>
+    <appear>直接在参数后面添加payload即可</appear>
+  </s2>
+  <s2 id="devmode">
+    <name>Struts-devMode</name>
+    <version>struts 2.1.0-2.5.1</version>
+    <info>所谓的devMode模式，看名称也知道，是为Struts2开发人员调试程序准备的，在此模式下可以方便地查看日志等信息。默认情况下，devMode模式是关闭的。不过实际上仍然有很多网站上线的时候就赤裸裸地采用devMode模式，自然面临更大的安全问题，需要尽快修复。当Struts2开启devMode模式时，将导致严重远程代码执行漏洞。如果WebService 启动权限为最高权限时，可远程执行任意命令，包括关机、建立新用户、以及删除服务器上所有文件等等。</info>
+    <appear>直接在action 后面添加payload就可以了</appear>
+  </s2>
+</struts2>
